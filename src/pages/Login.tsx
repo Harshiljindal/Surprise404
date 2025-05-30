@@ -292,12 +292,20 @@ const LoadingBar = styled.div`
   }
 `;
 
+const progressPulse = keyframes`
+  0% { box-shadow: 0 0 10px rgba(0,255,0,0.8); }
+  50% { box-shadow: 0 0 20px rgba(0,255,0,0.8), 0 0 30px rgba(0,255,0,0.4); }
+  100% { box-shadow: 0 0 10px rgba(0,255,0,0.8); }
+`;
+
 const ProgressBar = styled.div<StyleProps>`
   width: 100%;
-  height: 2px;
+  height: 4px;
   background: rgba(0,255,0,0.1);
   position: relative;
   margin: 20px 0;
+  border-radius: 2px;
+  overflow: hidden;
   
   &::before {
     content: '';
@@ -305,10 +313,21 @@ const ProgressBar = styled.div<StyleProps>`
     top: 0;
     left: 0;
     height: 100%;
-    background: #0f0;
+    background: linear-gradient(90deg, #0f0, #00ff00);
     width: ${props => props.progress}%;
     box-shadow: 0 0 10px rgba(0,255,0,0.8);
     transition: width 0.3s ease;
+    animation: ${progressPulse} 2s infinite;
+  }
+
+  &::after {
+    content: '${props => Math.round(props.progress || 0)}%';
+    position: absolute;
+    right: 0;
+    top: -20px;
+    font-size: 12px;
+    color: #0f0;
+    text-shadow: 0 0 5px rgba(0,255,0,0.8);
   }
 `;
 
@@ -523,7 +542,7 @@ function Login() {
         // Final success sequence
         const terminal = document.querySelector('#terminal') as HTMLElement;
         if (terminal) {
-          terminal.style.animation = `${powerOn} 2s ease-out`;
+          terminal.style.animation = `${bootEffect} 2s ease-out`;
         }
         
         setTimeout(() => {
@@ -553,41 +572,66 @@ function Login() {
         setShowError(false);
       }, 2000);
     }
-  };      // Boot sequence
+  };    // Boot sequence
   useEffect(() => {
     let isMounted = true;
+    let progressInterval: ReturnType<typeof setInterval>;
+    let soundInterval: ReturnType<typeof setInterval>;
+    const soundCheckpoints = new Set([25, 50, 75, 90]);
+    let lastSoundPlayed = -1;
 
     const bootSequence = async () => {
-      let currentProgress = 0;
-      const interval = setInterval(() => {
+      const startTime = Date.now();
+      const totalDuration = 36000; // 36 seconds in ms
+
+      // Initial scan sound
+      playSound('scan');
+
+      // Start progress updates
+      progressInterval = setInterval(() => {
         if (!isMounted) {
-          clearInterval(interval);
+          clearInterval(progressInterval);
           return;
         }
-        currentProgress += Math.random() * 15;
-        if (currentProgress > 100) {
-          currentProgress = 100;
-          clearInterval(interval);
+
+        const elapsed = Date.now() - startTime;
+        const progressPercent = Math.min((elapsed / totalDuration) * 100, 100);
+        
+        // Play sound effects at specific progress points
+        const currentCheckpoint = Math.floor(progressPercent);
+        if (soundCheckpoints.has(currentCheckpoint) && currentCheckpoint > lastSoundPlayed) {
+          playSound('beep');
+          lastSoundPlayed = currentCheckpoint;
+        }
+
+        if (progressPercent >= 100) {
+          clearInterval(progressInterval);
+          clearInterval(soundInterval);
           if (isMounted) {
             setProgress(100);
-            setTimeout(() => {
-              if (isMounted) {
-                setInitComplete(true);
-              }
-            }, 500);
+            playSound('success');
           }
-        } else if (isMounted) {
-          setProgress(currentProgress);
+        } else {
+          setProgress(progressPercent);
         }
-      }, 200);
+      }, 100); // More frequent updates for smoother progress
 
-      return () => clearInterval(interval);
+      // Typing sounds
+      soundInterval = setInterval(() => {
+        if (!isMounted || progress >= 100) {
+          clearInterval(soundInterval);
+          return;
+        }
+        playSound('typing');
+      }, 2000);
     };
 
     bootSequence();
 
     return () => {
       isMounted = false;
+      clearInterval(progressInterval);
+      clearInterval(soundInterval);
     };
   }, []);
 
@@ -597,7 +641,7 @@ function Login() {
       x: Math.random() * window.innerWidth,
       duration: Math.random() * 2 + 1,
       delay: Math.random() * 2,
-      char: String.fromCharCode(0x30A0 + Math.random() * 96)
+      char: String.fromCharCode(33 + Math.floor(Math.random() * 93)) // ASCII characters instead of Chinese
     });
 
     const raindrops = Array.from({ length: 50 }, () => createRainDrop());
@@ -616,15 +660,15 @@ function Login() {
   const questions = [
     {
       title: "SECURITY CHECKPOINT 1/3",
-      question: "What's the secret code word that only you know?",
+      question: "What's the name of our common enemy in our language?",
       hint: "🐉 Hint: A mythical creature in our stories... (Starts with 'C', ends with 'A')",
       answer: "chimera",
       type: "text"
     },
     {
       title: "SECURITY CHECKPOINT 2/3",
-      question: "What did you say when I asked for your hand?",
-      hint: "👶 Hint: Our word for 'hand' in baby language... (H**T)",
+      question: "A word that we use a lot",
+      hint: "👶 Hint:H**T",
       answer: "haat",
       type: "text"
     },
@@ -682,10 +726,14 @@ function Login() {
       }
     }
   };
-
-  const playSound = (type: 'keyPress' | 'error' | 'success') => {
+  const playSound = (type: 'keyPress' | 'error' | 'success' | 'beep' | 'scan' | 'typing') => {
     const sound = new Audio(`/src/assets/sounds/${type}.mp3`);
-    sound.volume = type === 'keyPress' ? 0.3 : type === 'error' ? 0.5 : 0.4;
+    sound.volume = type === 'keyPress' ? 0.3 
+                 : type === 'error' ? 0.5 
+                 : type === 'beep' ? 0.2
+                 : type === 'scan' ? 0.3
+                 : type === 'typing' ? 0.15
+                 : 0.4;
     sound.play().catch(console.error);
   };
 
@@ -713,32 +761,55 @@ function Login() {
         <TerminalContent>
           {!started ? (
             <>
-              <TypewriterText>
-                <Typewriter
-                  onInit={(typewriter) => {
+              <TypewriterText>                <Typewriter                  options={{
+                    delay: 80,
+                    cursor: '█',
+                    loop: false
+                  }}                  onInit={(typewriter) => {
+                    const typingSpeed = 80; // ms per character
+                    
                     typewriter
-                      .changeDelay(50)
-                      .typeString('> INITIALIZING BIRTHDAY PROTOCOL v2.5.0')
-                      .pauseFor(1000)
-                      .typeString('\n\n> ESTABLISHING SECURE CONNECTION...')
-                      .pauseFor(800)
-                      .typeString('\n> SCANNING NETWORK...')
-                      .pauseFor(600)
-                      .typeString('\n> DETECTED: SPECIAL GUEST - ADITI')
+                      .changeDelay(typingSpeed)
+                      // Phase 1: Initial messages (0-8s)
+                      .typeString('> Initializing Birthday Protocol v3.0.0')                      .pauseFor(800)
+                      .typeString('\n> Establishing secure connection...')
                       .pauseFor(500)
-                      .typeString('\n> ACTIVATING BIRTHDAY SECURITY MEASURES')
-                      .pauseFor(500)
-                      .typeString('\n> LOADING SURPRISE MODULES...')
-                      .pauseFor(700)
-                      .typeString('\n> CONFIGURING BIRTHDAY PARAMETERS...')
-                      .pauseFor(600)
-                      .typeString('\n> GENERATING HAPPINESS ALGORITHMS...')
-                      .pauseFor(500)
-                      .typeString('\n> CALIBRATING JOY LEVELS...')
-                      .pauseFor(800)
-                      .typeString('\n\n> INITIALIZATION COMPLETE')
-                      .pauseFor(500)
-                      .typeString('\n> WAITING FOR USER INPUT...')
+                      .typeString(' [OK]')
+                      .pauseFor(300)
+                      .typeString('\n> Scanning quantum network...')
+                      .pauseFor(300)
+                      .typeString(' [✨ADITI DETECTED✨]')
+                      .pauseFor(100)
+                      .callFunction(() => {
+                        setTimeout(() => {
+                          typewriter
+                            .typeString('\n\n> LOADING CORE SYSTEMS:')                            .pauseFor(100)
+                            .typeString('\n  ▸ Joy Generator..........[READY]')
+                            .pauseFor(500)
+                            .typeString('\n  ▸ Birthday Protocol......[READY]')
+                            .pauseFor(500)
+                            .typeString('\n  ▸ Love Modules...........[READY]')
+                            .pauseFor(500)
+                            .typeString('\n  ▸ Surprise Matrix........[READY]')
+                            .pauseFor(500)
+                            .start();
+
+                          // Phase 3: Final sequence (24-36s)
+                          setTimeout(() => {
+                            typewriter
+                              .typeString('\n\n> ALL SYSTEMS SYNCHRONIZED')
+                              .pauseFor(2000)
+                              .typeString('\n> SECURITY PROTOCOLS ACTIVE')
+                              .pauseFor(2000)
+                              .typeString('\n> AWAITING USER AUTHENTICATION...')
+                              .pauseFor(2000)
+                              .callFunction(() => {
+                                setInitComplete(true); // Show login at exactly 36s
+                              })
+                              .start();
+                          }, 12000); // Start final phase after core systems
+                        }, 8000); // Start core systems phase
+                      })
                       .start();
                   }}
                 />
