@@ -23,43 +23,12 @@ interface StyleProps {
 }
 
 // Animation keyframes
-const glitch = keyframes`
-  0% { transform: translate(0) }
-  20% { transform: translate(-2px, 2px); filter: hue-rotate(90deg); }
-  40% { transform: translate(-2px, -2px); filter: hue-rotate(180deg); }
-  60% { transform: translate(2px, 2px); filter: hue-rotate(270deg); }
-  80% { transform: translate(2px, -2px); filter: hue-rotate(360deg); }
-  100% { transform: translate(0); filter: hue-rotate(0deg); }
-`;
 
 const scanline = keyframes`
   0% { transform: translateY(0); }
   100% { transform: translateY(100vh); }
 `;
 
-const flicker = keyframes`
-  0% { opacity: 0.8; }
-  5% { opacity: 0.85; }
-  10% { opacity: 0.9; }
-  15% { opacity: 0.85; }
-  20% { opacity: 0.95; }
-  25% { opacity: 0.85; }
-  30% { opacity: 0.9; }
-  35% { opacity: 1; }
-  40% { opacity: 0.95; }
-  45% { opacity: 0.85; }
-  50% { opacity: 0.9; }
-  55% { opacity: 0.95; }
-  60% { opacity: 0.9; }
-  65% { opacity: 0.85; }
-  70% { opacity: 0.95; }
-  75% { opacity: 0.9; }
-  80% { opacity: 1; }
-  85% { opacity: 0.95; }
-  90% { opacity: 0.85; }
-  95% { opacity: 0.9; }
-  100% { opacity: 0.95; }
-`;
 
 const matrix = keyframes`
   0% { transform: translateY(-100%); }
@@ -331,25 +300,6 @@ const ProgressBar = styled.div<StyleProps>`
   }
 `;
 
-const TerminalHeader = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 25px;
-  background: rgba(0,20,0,0.8);
-  border-bottom: 1px solid rgba(0,255,0,0.2);
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  
-  &::before {
-    content: '⬤ ⬤ ⬤';
-    font-size: 12px;
-    color: rgba(0,255,0,0.5);
-    letter-spacing: 4px;
-  }
-`;
 
 const TerminalContent = styled.div`
   margin-top: 30px;
@@ -373,35 +323,8 @@ const TerminalContent = styled.div`
   }
 `;
 
-const Cursor = styled.span`
-  display: inline-block;
-  width: 8px;
-  height: 15px;
-  background: #0f0;
-  margin-left: 4px;
-  animation: ${flicker} 1s infinite;
-`;
 
-const ResponseText = styled(motion.div)<StyleProps>`
-  color: ${props => props.$success ? '#0f0' : '#f00'};
-  margin-top: 10px;
-  padding: 5px;
-  border-left: 2px solid ${props => props.$success ? '#0f0' : '#f00'};
-  animation: ${glowPulse} 2s infinite;
-`;
 
-const DataStreamLine = styled.div<StyleProps>`
-  position: absolute;
-  top: 0;
-  left: ${props => props.left}px;
-  color: rgba(0, 255, 0, 0.5);
-  font-family: monospace;
-  font-size: 14px;
-  white-space: nowrap;
-  transform: translateY(-1000px);
-  animation: ${dataStream} ${props => props.duration}s linear infinite;
-  animation-delay: ${props => props.delay}s;
-`;
 
 const QuestionContainer = styled(motion.div)`
   margin: 20px 0;
@@ -578,14 +501,12 @@ function Login() {
     let progressInterval: ReturnType<typeof setInterval>;
     let soundInterval: ReturnType<typeof setInterval>;
     const soundCheckpoints = new Set([25, 50, 75, 90]);
-    let lastSoundPlayed = -1;
-
-    const bootSequence = async () => {
+    let lastSoundPlayed = -1;    const bootSequence = async () => {
       const startTime = Date.now();
       const totalDuration = 36000; // 36 seconds in ms
 
-      // Initial scan sound
-      playSound('scan');
+      // Initial startup sound
+      playSound('success');
 
       // Start progress updates
       progressInterval = setInterval(() => {
@@ -596,11 +517,10 @@ function Login() {
 
         const elapsed = Date.now() - startTime;
         const progressPercent = Math.min((elapsed / totalDuration) * 100, 100);
-        
-        // Play sound effects at specific progress points
+          // Play sound effects at specific progress points
         const currentCheckpoint = Math.floor(progressPercent);
         if (soundCheckpoints.has(currentCheckpoint) && currentCheckpoint > lastSoundPlayed) {
-          playSound('beep');
+          playSound('typing');
           lastSoundPlayed = currentCheckpoint;
         }
 
@@ -614,16 +534,14 @@ function Login() {
         } else {
           setProgress(progressPercent);
         }
-      }, 100); // More frequent updates for smoother progress
-
-      // Typing sounds
+      }, 100); // More frequent updates for smoother progress      // Typing sounds - more frequent for better effect
       soundInterval = setInterval(() => {
         if (!isMounted || progress >= 100) {
           clearInterval(soundInterval);
           return;
         }
         playSound('typing');
-      }, 2000);
+      }, 200); // Reduced from 2000ms to 200ms for more responsive typing sound
     };
 
     bootSequence();
@@ -725,16 +643,17 @@ function Login() {
         }, 2000);
       }
     }
-  };
-  const playSound = (type: 'keyPress' | 'error' | 'success' | 'beep' | 'scan' | 'typing') => {
+  };  type SoundType = 'keyPress' | 'error' | 'success' | 'typing';
+  
+  const playSound = (type: SoundType) => {
     const sound = new Audio(`/src/assets/sounds/${type}.mp3`);
     sound.volume = type === 'keyPress' ? 0.3 
-                 : type === 'error' ? 0.5 
-                 : type === 'beep' ? 0.2
-                 : type === 'scan' ? 0.3
-                 : type === 'typing' ? 0.15
-                 : 0.4;
-    sound.play().catch(console.error);
+                : type === 'error' ? 0.5 
+                : type === 'typing' ? 0.08
+                : 0.4;
+    return sound.play().catch(err => {
+      console.error('Error playing sound:', err);
+    });
   };
 
   return (
@@ -761,12 +680,15 @@ function Login() {
         <TerminalContent>
           {!started ? (
             <>
-              <TypewriterText>                <Typewriter                  options={{
+              <TypewriterText>                <Typewriter
+                  options={{
                     delay: 80,
                     cursor: '█',
                     loop: false
-                  }}                  onInit={(typewriter) => {
+                  }}
+                  onInit={(typewriter) => {
                     const typingSpeed = 80; // ms per character
+                    playSound('typing');
                     
                     typewriter
                       .changeDelay(typingSpeed)
@@ -804,6 +726,7 @@ function Login() {
                               .typeString('\n> AWAITING USER AUTHENTICATION...')
                               .pauseFor(2000)
                               .callFunction(() => {
+                                playSound('typing');
                                 setInitComplete(true); // Show login at exactly 36s
                               })
                               .start();
